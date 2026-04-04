@@ -77,4 +77,3 @@ cmd/virtual/main.go: routerURL = "ws://192.168.0.176:9090/ws"
 ```sh
 go test ./...
 ```
-# wamp-printing-bridge
