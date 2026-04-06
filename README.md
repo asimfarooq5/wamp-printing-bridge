@@ -1,4 +1,4 @@
-# WAMP Printer Bridge
+# WAMP Printing Bridge
 
 Transparently share printers over a WAMP router. The **host** machine exposes its CUPS printers via WAMP; the **virtual** machine auto-creates matching local CUPS queues that forward jobs back over WAMP.
 
