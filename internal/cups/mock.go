@@ -9,15 +9,15 @@ import (
 // Populate the fields before use; record fields are appended on each call.
 type MockClient struct {
 	// Canned responses
-	Printers        []string
+	PrinterInfos    []PrinterInfo
 	WampprintQueues map[string]string
 	PrintJobID      int
 
 	// Error overrides
-	ListErr   error
-	GetErr    error
-	CreateErr error
-	DeleteErr error
+	GetErr       error
+	CreateErr    error
+	DeleteErr    error
+	PrintInfoErr error
 
 	// PrintErr is returned on print calls.
 	// If PrintFailFirst > 0, it is returned only on the first PrintFailFirst calls;
@@ -32,11 +32,11 @@ type MockClient struct {
 	Printed        []string // "printer:filePath" pairs from successful PrintRaw calls
 }
 
-func (m *MockClient) ListPrinters(_ context.Context) ([]string, error) {
-	if m.ListErr != nil {
-		return nil, m.ListErr
+func (m *MockClient) GetPrintersInfo(_ context.Context) ([]PrinterInfo, error) {
+	if m.PrintInfoErr != nil {
+		return nil, m.PrintInfoErr
 	}
-	return m.Printers, nil
+	return m.PrinterInfos, nil
 }
 
 func (m *MockClient) PrintRaw(_ context.Context, printer, filePath string) (int, error) {
@@ -59,7 +59,7 @@ func (m *MockClient) GetWampprintQueues(_ context.Context) (map[string]string, e
 	return m.WampprintQueues, nil
 }
 
-func (m *MockClient) CreateQueue(_ context.Context, name, _ string) error {
+func (m *MockClient) CreateQueue(_ context.Context, name, _, _ string) error {
 	if m.CreateErr != nil {
 		return m.CreateErr
 	}

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	routerURL         = "ws://192.168.0.176:9090/ws"
+	routerURL         = "ws://159.65.112.187:9090/ws"
 	realm             = "realm1"
 	printMaxRetries   = 3
 	maxBackoff        = 30 * time.Second
@@ -25,8 +25,9 @@ const (
 var printRetryDelay = 2 * time.Second
 
 var (
-	session     *xconn.Session
-	cupsManager cups.Manager
+	session        *xconn.Session
+	cupsManager    cups.Manager
+	hostRuntimeCtx context.Context
 )
 
 // JobStatus carries state for a single print job published over WAMP.
@@ -56,14 +57,19 @@ func publishJobStatus(js JobStatus) {
 }
 
 // listPrinters is exposed as RPC: "io.xconn.printer.list"
+// Returns a list of {name, ppd} maps so the virtual side can create matching queues.
 func listPrinters(ctx context.Context, inv *xconn.Invocation) *xconn.InvocationResult {
-	printers, err := cupsManager.ListPrinters(ctx)
+	infos, err := cupsManager.GetPrintersInfo(ctx)
 	if err != nil {
 		log.Printf("listPrinters: %v", err)
-		printers = []string{}
+		infos = []cups.PrinterInfo{}
+	}
+	result := make([]map[string]any, len(infos))
+	for i, info := range infos {
+		result[i] = map[string]any{"name": info.Name, "ppd": info.PPDModel}
 	}
 	res := xconn.NewInvocationResult()
-	res.Args = []any{printers}
+	res.Args = []any{result}
 	return res
 }
 
@@ -98,6 +104,11 @@ func executePrint(ctx context.Context, jobID, printer, filename string, data []b
 
 	var lastErr error
 	for attempt := 1; attempt <= printMaxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			lastErr = err
+			break
+		}
+
 		var cupsJobID int
 		cupsJobID, lastErr = cupsManager.PrintRaw(ctx, printer, tmpPath)
 		if lastErr == nil {
@@ -149,7 +160,15 @@ func sendPrint(ctx context.Context, inv *xconn.Invocation) *xconn.InvocationResu
 		return xconn.NewInvocationResult()
 	}
 
-	go executePrint(ctx, jobID, printer, filename, data)
+	// Do not tie the actual CUPS submission to the RPC invocation lifecycle.
+	// The caller only needs an acknowledgement that the job was accepted; the
+	// print itself should continue until the host process shuts down.
+	printCtx := hostRuntimeCtx
+	if printCtx == nil {
+		printCtx = context.Background()
+	}
+
+	go executePrint(printCtx, jobID, printer, filename, data)
 
 	return xconn.NewInvocationResult()
 }
@@ -174,6 +193,7 @@ func healthCheck(ctx context.Context, sess *xconn.Session, cancel context.Cancel
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	hostRuntimeCtx = ctx
 
 	cupsManager = cups.NewClient("localhost", 631)
 

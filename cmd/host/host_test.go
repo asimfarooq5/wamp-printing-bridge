@@ -101,10 +101,13 @@ func TestExecutePrint_ContextCancelled(t *testing.T) {
 
 func TestListPrinters_ReturnsMockPrinters(t *testing.T) {
 	cupsManager = &cups.MockClient{
-		Printers: []string{"HP_LaserJet", "Canon_PIXMA"},
+		PrinterInfos: []cups.PrinterInfo{
+			{Name: "HP_LaserJet", PPDModel: "drv:///sample.drv/generic.ppd"},
+			{Name: "Canon_PIXMA", PPDModel: "drv:///sample.drv/generic.ppd"},
+		},
 	}
 
-	printers, err := cupsManager.ListPrinters(context.Background())
+	printers, err := cupsManager.GetPrintersInfo(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,9 +117,9 @@ func TestListPrinters_ReturnsMockPrinters(t *testing.T) {
 }
 
 func TestListPrinters_Empty(t *testing.T) {
-	cupsManager = &cups.MockClient{Printers: []string{}}
+	cupsManager = &cups.MockClient{PrinterInfos: []cups.PrinterInfo{}}
 
-	printers, err := cupsManager.ListPrinters(context.Background())
+	printers, err := cupsManager.GetPrintersInfo(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,9 +129,9 @@ func TestListPrinters_Empty(t *testing.T) {
 }
 
 func TestListPrinters_Error(t *testing.T) {
-	cupsManager = &cups.MockClient{ListErr: errors.New("CUPS unavailable")}
+	cupsManager = &cups.MockClient{PrintInfoErr: errors.New("CUPS unavailable")}
 
-	_, err := cupsManager.ListPrinters(context.Background())
+	_, err := cupsManager.GetPrintersInfo(context.Background())
 	if err == nil {
 		t.Error("expected error, got nil")
 	}
