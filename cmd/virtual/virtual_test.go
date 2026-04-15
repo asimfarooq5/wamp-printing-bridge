@@ -10,10 +10,6 @@ import (
 	"github.com/xconnio/wamp_printer_bridge/internal/cups"
 )
 
-// -------------------------------------------------------
-// computePrinterDiff — pure logic, no CUPS or WAMP needed
-// -------------------------------------------------------
-
 func TestComputePrinterDiff_CreateAll(t *testing.T) {
 	toCreate, toDelete := computePrinterDiff(
 		[]remoteEntry{{name: "A"}, {name: "B"}},
@@ -72,10 +68,6 @@ func TestComputePrinterDiff_EmptyBoth(t *testing.T) {
 	}
 }
 
-// -------------------------------------------------------
-// Sync behaviour via MockClient — no printer, no WAMP needed
-// -------------------------------------------------------
-
 func TestSync_CreatesNewQueues(t *testing.T) {
 	mock := &cups.MockClient{WampprintQueues: map[string]string{}}
 	cupsManager = mock
@@ -105,7 +97,7 @@ func TestSync_DeletesStaleQueues(t *testing.T) {
 	}
 	cupsManager = mock
 
-	local, _ := cupsManager.GetWampprintQueues(context.Background())
+	local, _ := cupsManager.GetWampPrintQueues(context.Background())
 	_, toDelete := computePrinterDiff([]remoteEntry{}, local)
 
 	for _, q := range toDelete {
@@ -135,7 +127,7 @@ func TestSync_GetQueuesError(t *testing.T) {
 	mock := &cups.MockClient{GetErr: errors.New("CUPS unavailable")}
 	cupsManager = mock
 
-	_, err := cupsManager.GetWampprintQueues(context.Background())
+	_, err := cupsManager.GetWampPrintQueues(context.Background())
 	if err == nil {
 		t.Error("expected error, got nil")
 	}
@@ -150,7 +142,7 @@ func TestSync_NoChangesWhenInSync(t *testing.T) {
 	}
 	cupsManager = mock
 
-	local, _ := cupsManager.GetWampprintQueues(context.Background())
+	local, _ := cupsManager.GetWampPrintQueues(context.Background())
 	toCreate, toDelete := computePrinterDiff([]remoteEntry{{name: "Office"}, {name: "Home"}}, local)
 
 	if len(toCreate) != 0 || len(toDelete) != 0 {

@@ -5,31 +5,23 @@ import (
 	"fmt"
 )
 
-// MockClient is a Manager implementation for use in tests.
-// Populate the fields before use; record fields are appended on each call.
 type MockClient struct {
-	// Canned responses
 	PrinterInfos    []PrinterInfo
 	WampprintQueues map[string]string
 	PrintJobID      int
 
-	// Error overrides
 	GetErr       error
 	CreateErr    error
 	DeleteErr    error
 	PrintInfoErr error
 
-	// PrintErr is returned on print calls.
-	// If PrintFailFirst > 0, it is returned only on the first PrintFailFirst calls;
-	// subsequent calls succeed. If PrintFailFirst == 0, every call fails.
 	PrintErr       error
 	PrintFailFirst int
 
-	// Call records
 	PrintCallCount int
-	Created        []string // name values passed to CreateQueue
-	Deleted        []string // name values passed to DeleteQueue
-	Printed        []string // "printer:filePath" pairs from successful PrintRaw calls
+	Created        []string
+	Deleted        []string
+	Printed        []string
 }
 
 func (m *MockClient) GetPrintersInfo(_ context.Context) ([]PrinterInfo, error) {
@@ -49,7 +41,7 @@ func (m *MockClient) PrintRaw(_ context.Context, printer, filePath string) (int,
 	return m.PrintJobID, nil
 }
 
-func (m *MockClient) GetWampprintQueues(_ context.Context) (map[string]string, error) {
+func (m *MockClient) GetWampPrintQueues(_ context.Context) (map[string]string, error) {
 	if m.GetErr != nil {
 		return nil, m.GetErr
 	}

@@ -12,37 +12,25 @@ import (
 	ipp "github.com/phin1x/go-ipp"
 )
 
-// ippStatusNoDestinations is the IPP status code CUPS returns when no printers
-// are configured (client-error-not-found, 0x0406).
 const ippStatusNoDestinations = int16(1030)
 
-// PrinterInfo holds the name and PPD model string for a CUPS printer.
 type PrinterInfo struct {
 	Name     string
 	PPDModel string
 }
 
-// Manager abstracts CUPS operations so callers can be tested without a real printer.
 type Manager interface {
-	// GetPrintersInfo returns name and PPD model for all printers known to CUPS.
 	GetPrintersInfo(ctx context.Context) ([]PrinterInfo, error)
 
-	// PrintRaw submits filePath to the named printer as raw bytes (no PPD processing).
 	PrintRaw(ctx context.Context, printer, filePath string) (int, error)
 
-	// GetWampprintQueues returns every local CUPS queue whose device URI starts
-	// with "wampprint", keyed by the remote printer name.
-	// e.g. {"Office": "Remote_Office"}
-	GetWampprintQueues(ctx context.Context) (map[string]string, error)
+	GetWampPrintQueues(ctx context.Context) (map[string]string, error)
 
-	// CreateQueue adds a CUPS queue backed by the given wampprint:/ URI using ppdModel.
 	CreateQueue(ctx context.Context, name, deviceURI, ppdModel string) error
 
-	// DeleteQueue removes a CUPS queue by name.
 	DeleteQueue(ctx context.Context, name string) error
 }
 
-// Client implements Manager against a live CUPS daemon via IPP.
 type Client struct {
 	host string
 	port int
@@ -92,8 +80,6 @@ func (c *Client) PrintRaw(ctx context.Context, printer, filePath string) (int, e
 		return -1, err
 	}
 
-	// Preserve the document type CUPS generated on the virtual side so the host
-	// can run the correct filter chain for PDF vs PostScript jobs.
 	return c.ippClient().PrintDocumentsContext(ctx, []ipp.Document{{
 		Document: f,
 		Name:     filepath.Base(filePath),
@@ -119,13 +105,11 @@ func detectMimeType(r io.ReadSeeker) (string, error) {
 	case strings.HasPrefix(sample, "%!PS-Adobe-"), strings.HasPrefix(sample, "%!PS"):
 		return "application/postscript", nil
 	default:
-		// Most browser-backed desktop print paths yield PDF or PostScript here.
-		// Fall back to octet-stream for anything else rather than mislabeling it.
 		return "application/octet-stream", nil
 	}
 }
 
-func (c *Client) GetWampprintQueues(ctx context.Context) (map[string]string, error) {
+func (c *Client) GetWampPrintQueues(ctx context.Context) (map[string]string, error) {
 	printers, err := c.cupsClient().GetPrintersContext(ctx, []string{"printer-name", "device-uri"})
 	if err != nil {
 		if isNoPrintersError(err) {
@@ -165,14 +149,11 @@ func (c *Client) DeleteQueue(ctx context.Context, name string) error {
 	return c.cupsClient().DeletePrinterContext(ctx, name)
 }
 
-// isNoPrintersError reports whether err is the IPP error CUPS returns when no
-// printers are configured ("No destinations added.", status 1030).
 func isNoPrintersError(err error) bool {
 	var ippErr ipp.IPPError
 	return errors.As(err, &ippErr) && ippErr.Status == ippStatusNoDestinations
 }
 
-// attrString extracts the first string value for key from an IPP Attributes map.
 func attrString(attrs ipp.Attributes, key string) string {
 	if vals, ok := attrs[key]; ok && len(vals) > 0 {
 		if s, ok := vals[0].Value.(string); ok {
