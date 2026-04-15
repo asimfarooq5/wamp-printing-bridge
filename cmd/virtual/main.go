@@ -30,17 +30,8 @@ const (
 	localAPIAddr  = "127.0.0.1:17990"
 	localPrintURL = "http://" + localAPIAddr + "/print"
 
-	// virtualPPD is used when creating virtual CUPS queues on the client machine.
-	// A generic PostScript PPD gives browsers (Chrome, Firefox) real printer
-	// capabilities (media sizes, colour, resolution) so print-preview works, and
-	// makes CUPS convert every job to PostScript before handing it to the backend.
-	// The host then re-submits that PostScript through its own printer's filter
-	// chain, so the correct driver on the host side handles PCL / device-specific
-	// conversion.
 	virtualPPD = "drv:///sample.drv/generic.ppd"
 
-	// backendTimeout is the maximum time the CUPS backend subprocess will wait
-	// for the WAMP round-trip before exiting with CUPS_BACKEND_FAILED.
 	backendTimeout = 60 * time.Second
 	maxBackoff     = 30 * time.Second
 )
@@ -72,32 +63,13 @@ func (v *virtualRuntime) sessionOrNil() *xconn.Session {
 	return v.session
 }
 
-// -------------------------------------------------------
-// CUPS backend mode
-//
-// When this binary is installed as /usr/lib/cups/backend/wampprint
-// and invoked by CUPS, os.Args[0] base-name is "wampprint".
-// CUPS calls it in two ways:
-//   - 0 args → device discovery (list devices)
-//   - 6 args → job-id user title copies options file
-// -------------------------------------------------------
-
-// runCUPSDiscovery is called by CUPS with 0 args to enumerate devices.
-// We output nothing because queues are created programmatically by the
-// virtual daemon — there are no static devices to discover here.
-func runCUPSDiscovery() {}
-
-// runCUPSBackend reads the print job and hands it off to the long-lived local
-// daemon, which is responsible for forwarding it to the host via WAMP.
-// CUPS backend args: job-id user title copies options [file]
-// All errors are written to stderr — CUPS records this in /var/log/cups/error_log.
 func runCUPSBackend() {
 	ctx, cancel := context.WithTimeout(context.Background(), backendTimeout)
 	defer cancel()
 
 	args := os.Args[1:]
 
-	deviceURI := os.Getenv("DEVICE_URI") // e.g. wampprint:/OfficePrinter
+	deviceURI := os.Getenv("DEVICE_URI")
 	printer := strings.TrimPrefix(deviceURI, backendName+":/")
 	printer = strings.TrimLeft(printer, "/")
 	if printer == "" {
@@ -151,10 +123,6 @@ func runCUPSBackend() {
 	logBackendDebug("job submitted printer=%s title=%q", printer, title)
 	fmt.Fprintf(os.Stderr, "DEBUG: wampprint: job submitted successfully (printer=%s)\n", printer)
 }
-
-// -------------------------------------------------------
-// CUPS backend installer
-// -------------------------------------------------------
 
 func ensureWampPrintBackend() error {
 	needsInstall, err := backendNeedsInstall()
@@ -241,11 +209,6 @@ func logBackendDebug(format string, args ...any) {
 	}
 }
 
-// -------------------------------------------------------
-// Printer diff logic
-// -------------------------------------------------------
-
-// remoteEntry holds printer info received from the host.
 type remoteEntry struct {
 	name     string
 	ppdModel string
@@ -268,10 +231,6 @@ func computePrinterDiff(remote []remoteEntry, local map[string]string) (toCreate
 	}
 	return
 }
-
-// -------------------------------------------------------
-// Sync loop
-// -------------------------------------------------------
 
 func fetchRemotePrinters(sess *xconn.Session) ([]remoteEntry, error) {
 	resp := sess.Call("io.xconn.printer.list").Do()
@@ -309,7 +268,7 @@ func syncPrintersOnce(ctx context.Context, sess *xconn.Session) error {
 	}
 	log.Printf("remote printers: %+v", remote)
 
-	local, err := cupsManager.GetWampprintQueues(ctx)
+	local, err := cupsManager.GetWampPrintQueues(ctx)
 	if err != nil {
 		return fmt.Errorf("GetWampprintQueues failed: %w", err)
 	}
@@ -321,8 +280,6 @@ func syncPrintersOnce(ctx context.Context, sess *xconn.Session) error {
 		queue := "Remote_" + p.name
 		deviceURI := backendName + ":/" + p.name
 
-		// Always use the local generic PPD on the virtual machine so desktop apps
-		// see a usable printer regardless of host-side model availability.
 		if err := cupsManager.CreateQueue(ctx, queue, deviceURI, virtualPPD); err != nil {
 			log.Printf("CreateQueue %s (remote model=%q): %v", queue, p.ppdModel, err)
 			continue
@@ -359,10 +316,6 @@ func syncPrinters(ctx context.Context, sess *xconn.Session) error {
 		}
 	}
 }
-
-// -------------------------------------------------------
-// Job status subscriber
-// -------------------------------------------------------
 
 func subscribeJobStatus(sess *xconn.Session) error {
 	resp := sess.Subscribe("io.xconn.print.job_status", func(event *xconn.Event) {
@@ -448,14 +401,11 @@ func serveLocalPrintAPI(ctx context.Context, runtime *virtualRuntime) error {
 	return nil
 }
 
-// -------------------------------------------------------
-// main
-// -------------------------------------------------------
+func runCUPSDiscovery() {
+
+}
 
 func main() {
-	// CUPS invokes backends differently depending on the code path:
-	// discovery runs the backend by filename, while print jobs set argv[0] to the
-	// device URI and provide DEVICE_URI in the environment. Detect both forms.
 	if isBackendInvocation() {
 		if len(os.Args) == 1 {
 			runCUPSDiscovery()
@@ -465,7 +415,6 @@ func main() {
 		return
 	}
 
-	// Daemon mode
 	if err := ensureWampPrintBackend(); err != nil {
 		panic(err)
 	}

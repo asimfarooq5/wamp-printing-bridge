@@ -21,7 +21,6 @@ const (
 	heartbeatInterval = 30 * time.Second
 )
 
-// printRetryDelay is a var so tests can set it to zero.
 var printRetryDelay = 2 * time.Second
 
 var (
@@ -30,11 +29,10 @@ var (
 	hostRuntimeCtx context.Context
 )
 
-// JobStatus carries state for a single print job published over WAMP.
 type JobStatus struct {
 	JobID     string
 	Printer   string
-	State     string // queued | retrying | printed | failed
+	State     string
 	Message   string
 	CreatedAt int64
 }
@@ -73,8 +71,6 @@ func listPrinters(ctx context.Context, inv *xconn.Invocation) *xconn.InvocationR
 	return res
 }
 
-// executePrint writes data to a unique temp file, submits it to CUPS with
-// up to printMaxRetries attempts, and publishes job status at every stage.
 func executePrint(ctx context.Context, jobID, printer, filename string, data []byte) {
 	tmp, err := os.CreateTemp("", "wampprint-*-"+filename)
 	if err != nil {
@@ -160,9 +156,6 @@ func sendPrint(ctx context.Context, inv *xconn.Invocation) *xconn.InvocationResu
 		return xconn.NewInvocationResult()
 	}
 
-	// Do not tie the actual CUPS submission to the RPC invocation lifecycle.
-	// The caller only needs an acknowledgement that the job was accepted; the
-	// print itself should continue until the host process shuts down.
 	printCtx := hostRuntimeCtx
 	if printCtx == nil {
 		printCtx = context.Background()

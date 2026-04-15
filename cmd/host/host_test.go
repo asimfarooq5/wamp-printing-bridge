@@ -9,14 +9,13 @@ import (
 )
 
 func init() {
-	// No delays during tests.
 	printRetryDelay = 0
 }
 
 func TestExecutePrint_Success(t *testing.T) {
 	mock := &cups.MockClient{PrintJobID: 42}
 	cupsManager = mock
-	session = nil // publishJobStatus is a no-op without a session
+	session = nil
 
 	executePrint(context.Background(), "job-1", "HP_LaserJet", "doc.pdf", []byte("PDF content"))
 
@@ -31,7 +30,6 @@ func TestExecutePrint_Success(t *testing.T) {
 func TestExecutePrint_AllAttemptsFail(t *testing.T) {
 	mock := &cups.MockClient{
 		PrintErr: errors.New("printer offline"),
-		// PrintFailFirst == 0 means every call fails
 	}
 	cupsManager = mock
 	session = nil
@@ -47,7 +45,6 @@ func TestExecutePrint_AllAttemptsFail(t *testing.T) {
 }
 
 func TestExecutePrint_RetryThenSucceed(t *testing.T) {
-	// Fail the first 2 attempts, succeed on the 3rd.
 	mock := &cups.MockClient{
 		PrintJobID:     7,
 		PrintErr:       errors.New("printer busy"),
@@ -71,7 +68,6 @@ func TestExecutePrint_EmptyData(t *testing.T) {
 	cupsManager = mock
 	session = nil
 
-	// Empty data is valid — should still be sent to CUPS.
 	executePrint(context.Background(), "job-4", "HP_LaserJet", "empty.pdf", []byte{})
 
 	if mock.PrintCallCount != 1 {
@@ -82,18 +78,16 @@ func TestExecutePrint_EmptyData(t *testing.T) {
 func TestExecutePrint_ContextCancelled(t *testing.T) {
 	mock := &cups.MockClient{
 		PrintErr:       errors.New("printer busy"),
-		PrintFailFirst: 0, // always fail
+		PrintFailFirst: 0,
 	}
 	cupsManager = mock
 	session = nil
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancelled immediately
+	cancel()
 
 	executePrint(ctx, "job-5", "HP_LaserJet", "doc.pdf", []byte("PDF"))
 
-	// With context already cancelled, the retry sleep exits early.
-	// We expect at most 1 attempt before bailing.
 	if mock.PrintCallCount > 1 {
 		t.Errorf("expected ≤1 attempt with cancelled context, got %d", mock.PrintCallCount)
 	}
